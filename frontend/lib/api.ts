@@ -51,8 +51,10 @@ export async function extractMeta(file: File): Promise<MetaExtractResult> {
   form.append("file", file);
   const res = await fetch(`${BASE}/ingest/extract-meta`, { method: "POST", body: form });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message ?? "Metadata extraction failed");
+    const body = await res.text().catch(() => "");
+    let message = res.statusText || `HTTP ${res.status}`;
+    try { message = JSON.parse(body).message ?? message; } catch { if (body) message = `${res.status}: ${body.slice(0, 120)}`; }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -70,8 +72,10 @@ export async function ingestPdf(
   form.append("save_to_library", meta.save_to_library ? "true" : "false");
   const res = await fetch(`${BASE}/ingest`, { method: "POST", body: form });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText || "Upload failed" }));
-    throw new Error(err.message ?? "Ingest failed");
+    const body = await res.text().catch(() => "");
+    let message = res.statusText || `HTTP ${res.status}`;
+    try { message = JSON.parse(body).message ?? message; } catch { if (body) message = `${res.status}: ${body.slice(0, 120)}`; }
+    throw new Error(message);
   }
   return res.json();
 }
