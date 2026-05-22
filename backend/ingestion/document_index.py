@@ -9,8 +9,10 @@ from typing import Dict, List
 
 from .classifier import ContentType
 
+import os
+
 _ROOT = Path(__file__).parent.parent.parent
-_INDEX_DIR = _ROOT / "data" / "indexes"
+_INDEX_DIR = Path(os.getenv("INDEX_DIR", str(_ROOT / "data" / "indexes")))
 
 
 def generate_document_index(

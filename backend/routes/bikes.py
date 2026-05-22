@@ -4,12 +4,14 @@ GET /bikes/{document_id}/starters — returns 4 suggested questions derived from
 Scans data/indexes/ for *_index.json files written by generate_document_index().
 """
 import json
+import os
 from pathlib import Path
 from fastapi import APIRouter
 
 router = APIRouter()
 
-_INDEX_DIR = Path(__file__).parent.parent.parent / "data" / "indexes"
+_ROOT = Path(__file__).parent.parent.parent
+_INDEX_DIR = Path(os.getenv("INDEX_DIR", str(_ROOT / "data" / "indexes")))
 
 _SKIP_WORDS = {
     "safety", "index", "warranty", "introduction", "contents",

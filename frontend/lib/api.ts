@@ -69,7 +69,10 @@ export async function ingestPdf(
   form.append("manual_type", meta.manual_type);
   form.append("save_to_library", meta.save_to_library ? "true" : "false");
   const res = await fetch(`${BASE}/ingest`, { method: "POST", body: form });
-  if (!res.ok) throw new Error((await res.json()).message ?? "Ingest failed");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText || "Upload failed" }));
+    throw new Error(err.message ?? "Ingest failed");
+  }
   return res.json();
 }
 

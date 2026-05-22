@@ -22,7 +22,7 @@ from qdrant_client.models import (
 
 _COLLECTION = "bike_manuals"
 _ROOT = Path(__file__).parent.parent.parent
-_INDEX_DIR = _ROOT / "data" / "indexes"
+_INDEX_DIR = Path(os.getenv("INDEX_DIR", str(_ROOT / "data" / "indexes")))
 
 _qdrant_client: Optional[QdrantClient] = None
 
