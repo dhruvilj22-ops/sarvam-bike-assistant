@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -19,9 +20,17 @@ from routes.session import router as session_router
 
 app = FastAPI(title="Bike Troubleshooting Assistant")
 
+_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+if _extra := os.getenv("ALLOWED_ORIGINS", ""):
+    _ALLOWED_ORIGINS.extend(o.strip() for o in _extra.split(",") if o.strip())
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _ROOT = Path(__file__).parent.parent.parent
-_MANUALS_DIR = _ROOT / "data" / "manuals"
+# Vercel and most serverless platforms only allow writes to /tmp
+_MANUALS_DIR = Path(os.getenv("MANUALS_DIR", str(_ROOT / "data" / "manuals")))
 
 # Known brand names for mock/fallback extraction
 _BRAND_PATTERNS = {
