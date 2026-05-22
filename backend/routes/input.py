@@ -12,7 +12,7 @@ from input.vision import describe_image
 
 router = APIRouter()
 
-_ALLOWED_AUDIO = {".wav", ".mp3", ".m4a", ".ogg", ".webm", ".flac"}
+_ALLOWED_AUDIO = {".wav", ".mp3", ".m4a", ".mp4", ".ogg", ".webm", ".flac"}
 _ALLOWED_IMAGE = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 

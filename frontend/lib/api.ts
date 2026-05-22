@@ -82,12 +82,13 @@ export async function query(params: QueryParams): Promise<QueryResponse> {
 // ── Voice ──────────────────────────────────────────────────────────────────────
 
 export async function transcribeVoice(
-  audio: Blob,
+  audio: Blob | File,
   languageHint: string,
   sessionId?: string
 ): Promise<STTResponse> {
   const form = new FormData();
-  form.append("audio", audio, "recording.webm");
+  const filename = audio instanceof File ? audio.name : "recording.webm";
+  form.append("audio", audio, filename);
   if (languageHint) form.append("language_hint", languageHint);
   if (sessionId) form.append("session_id", sessionId);
   const res = await fetch(`${BASE}/input/voice`, { method: "POST", body: form });

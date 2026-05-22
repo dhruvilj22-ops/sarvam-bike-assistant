@@ -58,7 +58,7 @@ def describe_image(
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         b64 = base64.b64encode(image_bytes).decode()
         resp = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.4-mini",
             messages=[{
                 "role": "user",
                 "content": [
@@ -66,7 +66,7 @@ def describe_image(
                     {"type": "text", "text": _VISION_PROMPT},
                 ],
             }],
-            max_tokens=300,
+            max_completion_tokens=300,
         )
         description = resp.choices[0].message.content.strip()
         return {

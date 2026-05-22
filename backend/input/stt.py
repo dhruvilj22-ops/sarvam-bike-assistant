@@ -63,26 +63,36 @@ def _transcribe_sarvam(audio_bytes: bytes, language_hint: str = "hi-IN") -> Dict
 
 
 def _transcribe_whisper(audio_bytes: bytes, filename: str = "audio.wav") -> Dict:
+    import math
     from openai import OpenAI
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    audio_file = io.BytesIO(audio_bytes)
-    audio_file.name = filename
+    ext = filename.rsplit(".", 1)[-1].lower()
+    content_type = {
+        "wav": "audio/wav", "mp3": "audio/mpeg", "ogg": "audio/ogg",
+        "webm": "audio/webm", "mp4": "audio/mp4", "m4a": "audio/mp4",
+        "flac": "audio/flac",
+    }.get(ext, "audio/webm")
+    # Pass explicit content_type so httpx doesn't guess video/webm for .webm files
     result = client.audio.transcriptions.create(
         model="whisper-1",
-        file=audio_file,
+        file=(filename, audio_bytes, content_type),
         response_format="verbose_json",
     )
-    # avg_logprob is log probability; convert to a 0-1 confidence approximation
-    log_prob = getattr(result, "avg_logprob", -0.1)
-    import math
+    # avg_logprob lives inside segments[], not top-level
+    segments = getattr(result, "segments", None) or []
+    if segments:
+        log_prob = sum(s.get("avg_logprob", -0.1) if isinstance(s, dict) else getattr(s, "avg_logprob", -0.1) for s in segments) / len(segments)
+    else:
+        log_prob = -0.1
     confidence = min(1.0, max(0.0, math.exp(log_prob)))
     lang = getattr(result, "language", "en")
+    transcript = getattr(result, "text", "") or ""
     return {
-        "transcript": result.text,
+        "transcript": transcript,
         "language": lang,
         "confidence": confidence,
         "engine": "whisper",
-        "needs_retry": confidence < STT_CONFIDENCE_THRESHOLD,
+        "needs_retry": confidence < STT_CONFIDENCE_THRESHOLD or not transcript.strip(),
     }
 
 
@@ -115,11 +125,12 @@ def transcribe(
                     logger.warning("Sarvam fallback failed: %s — using Whisper result", e)
             return result
     except Exception as exc:
-        logger.error("STT failed: %s", exc)
+        logger.exception("STT failed")
         return {
             "transcript": "",
             "language": "en",
             "confidence": 0.0,
             "engine": "error",
             "needs_retry": True,
+            "_debug_error": str(exc),
         }

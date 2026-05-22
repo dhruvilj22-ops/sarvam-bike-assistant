@@ -32,19 +32,32 @@ export default function InputBar({ onSubmit, disabled, sessionId, language = "en
   const chunksRef = useRef<Blob[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const startRecording = useCallback(async () => {
+  const toggleRecording = useCallback(async () => {
+    if (recording) {
+      mediaRef.current?.stop();
+      setRecording(false);
+      return;
+    }
     setError("");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
+      const PREFERRED = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+      const mimeType = PREFERRED.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
       mr.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const actualType = mr.mimeType || mimeType || "audio/webm";
+        const ext = actualType.includes("ogg") ? "ogg" : actualType.includes("mp4") ? "mp4" : "webm";
+        const file = new File(chunksRef.current, `recording.${ext}`, { type: actualType });
+        if (file.size < 500) {
+          setError("Recording too short — speak for at least 1 second.");
+          return;
+        }
         setProcessingVoice(true);
         try {
-          const stt = await transcribeVoice(blob, language, sessionId);
+          const stt = await transcribeVoice(file, language, sessionId);
           if (stt.needs_retry) {
             setError("Didn't catch that clearly — please try again or type your question.");
           } else {
@@ -58,17 +71,12 @@ export default function InputBar({ onSubmit, disabled, sessionId, language = "en
         }
       };
       mediaRef.current = mr;
-      mr.start();
+      mr.start(100);
       setRecording(true);
     } catch {
       setError("Microphone access denied.");
     }
-  }, [language, sessionId]);
-
-  function stopRecording() {
-    mediaRef.current?.stop();
-    setRecording(false);
-  }
+  }, [recording, language, sessionId]);
 
   async function handleImage(file: File) {
     setError("");
@@ -172,19 +180,16 @@ export default function InputBar({ onSubmit, disabled, sessionId, language = "en
         {/* Voice button */}
         <button
           type="button"
-          onMouseDown={startRecording}
-          onMouseUp={stopRecording}
-          onTouchStart={startRecording}
-          onTouchEnd={stopRecording}
+          onClick={toggleRecording}
           disabled={disabled || processingVoice}
           className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all
             ${recording
-              ? "bg-red-500 text-white pulse-recording"
+              ? "bg-red-500 text-white animate-pulse"
               : processingVoice
               ? "bg-slate-100 text-slate-400"
               : "bg-slate-100 text-slate-500 hover:bg-blue-100 hover:text-blue-600"
             }`}
-          title="Hold to record"
+          title={recording ? "Click to stop recording" : "Click to start recording"}
         >
           {processingVoice
             ? <Loader2 size={16} className="animate-spin" />
@@ -243,7 +248,7 @@ export default function InputBar({ onSubmit, disabled, sessionId, language = "en
       </div>
 
       <p className="text-center text-[10px] text-slate-400">
-        Hold mic to speak · Attach an image · Press Enter to send
+        {recording ? "🔴 Recording — click mic again to stop" : "Click mic to speak · Attach an image · Press Enter to send"}
       </p>
     </div>
   );
