@@ -1,0 +1,9 @@
+.env
+__pycache__/
+.next/
+node_modules/
+*.pyc
+.DS_Store
+.qdrant/
+data/
+certs/

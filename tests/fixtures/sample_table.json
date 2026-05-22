@@ -1,0 +1,16 @@
+{
+  "table_title": "Torque Specifications",
+  "page_number": 47,
+  "chapter": "Maintenance",
+  "rows": [
+    {"component": "Front axle nut", "torque": "65 Nm", "notes": ""},
+    {"component": "Rear axle nut", "torque": "88 Nm", "notes": ""},
+    {"component": "Engine oil drain plug", "torque": "24 Nm", "notes": ""},
+    {"component": "Spark plug", "torque": "12 Nm", "notes": ""},
+    {"component": "Cylinder head bolts", "torque": "10 Nm", "notes": "Initial tightening, then 90 degree rotation"},
+    {"component": "Handlebar clamp bolts", "torque": "23 Nm", "notes": ""},
+    {"component": "Brake caliper mounting bolts", "torque": "30 Nm", "notes": ""},
+    {"component": "Front fork clamp bolts", "torque": "20 Nm", "notes": "Upper and lower"},
+    {"component": "Swingarm pivot nut", "torque": "78 Nm", "notes": ""}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "answer_text": "White smoke from the exhaust on the Royal Enfield Meteor 350 typically indicates oil entering the combustion chamber and burning alongside the fuel mixture. This can result from worn piston rings, a damaged valve stem seal, or a blown head gasket. According to Section 7.3.2 of the service manual, persistent white or bluish smoke at idle or under load is classified as an oil consumption symptom and requires inspection of the top-end components. If the smoke is dense and appears only during cold start then clears within 2-3 minutes, condensation may be the cause and is considered normal.",
+  "spoken_summary": "White smoke from the exhaust usually means oil is burning in the engine. This could be worn piston rings or a valve seal issue. Have it inspected at a service center if the smoke is persistent.",
+  "citations": [
+    {
+      "section_number": "7.3.2",
+      "section_title": "Exhaust Smoke Diagnosis",
+      "page_number": 134
+    }
+  ],
+  "severity_label": "Get Checked Soon",
+  "confidence": "high",
+  "suggested_followups": [
+    "How do I check engine oil consumption between service intervals?",
+    "What does blue smoke from the exhaust indicate?",
+    "How do I inspect the valve stem seals on the Meteor 350?"
+  ]
+}
