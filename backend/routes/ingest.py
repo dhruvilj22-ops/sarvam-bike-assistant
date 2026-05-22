@@ -7,8 +7,10 @@ import json
 import logging
 import os
 import re
+import tempfile
+import urllib.request
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 
 import store
 
@@ -61,6 +63,15 @@ Extract these fields from the text:
 Return ONLY valid JSON: {"bike_brand": "...", "bike_model": "...", "bike_year": "...", "manual_type": "..."}
 Use "" for any field you cannot confidently determine. Never guess.\
 """
+
+
+def _download_blob(blob_url: str) -> str:
+    """Download a Vercel Blob URL to a temp file and return the path."""
+    suffix = ".pdf"
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix, dir="/tmp")
+    os.close(fd)
+    urllib.request.urlretrieve(blob_url, tmp_path)
+    return tmp_path
 
 
 def _read_first_pages(pdf_bytes: bytes, max_pages: int = 3) -> str:
@@ -187,6 +198,22 @@ def _llm_extract(text: str) -> dict:
     return result
 
 
+def _run_ingest_from_blob(job_id: str, blob_url: str, doc_meta: dict) -> None:
+    tmp_path = None
+    try:
+        store.update_job(job_id, status="processing", progress_pct=5, message="Downloading PDF...")
+        tmp_path = _download_blob(blob_url)
+        _run_ingest(job_id, tmp_path, doc_meta)
+    except Exception as exc:
+        store.update_job(job_id, status="error", progress_pct=0, message=str(exc))
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
 def _run_ingest(job_id: str, pdf_path: str, doc_meta: dict) -> None:
     use_mocks = os.getenv("USE_MOCKS", "false").lower() == "true"
     try:
@@ -226,51 +253,47 @@ def _run_ingest(job_id: str, pdf_path: str, doc_meta: dict) -> None:
 
 
 @router.post("/ingest/extract-meta")
-async def extract_meta(file: UploadFile = File(...)):
+async def extract_meta(blob_url: str = Form(...)):
     """
-    Read the first 3 pages of a PDF and return extracted bike metadata.
-    Fast — does not start a full ingestion job.
+    Download the PDF from a Vercel Blob URL, read the first 3 pages,
+    and return extracted bike metadata. Does not start a full ingestion job.
     """
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-
     use_mocks = os.getenv("USE_MOCKS", "false").lower() == "true"
+    tmp_path = None
     try:
-        pdf_bytes = await file.read()
+        tmp_path = _download_blob(blob_url)
+        with open(tmp_path, "rb") as f:
+            pdf_bytes = f.read()
         text = _read_first_pages(pdf_bytes)
-        fallback = _fallback_extract(text, file.filename or "")
+        fallback = _fallback_extract(text, blob_url.split("/")[-1])
         if use_mocks or not os.getenv("OPENROUTER_API_KEY", "").strip():
             return _mock_extract(text)
         return _merge_meta(_llm_extract(text), fallback)
     except Exception as exc:
         logger.warning("extract-meta failed: %s", exc)
         try:
-            return _fallback_extract(text if "text" in locals() else "", file.filename or "")
+            return _fallback_extract(text if "text" in locals() else "", "")
         except Exception:
             return {"bike_brand": "", "bike_model": "", "bike_year": "",
                     "manual_type": "service_manual", "confidence": "error"}
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
 
 @router.post("/ingest", status_code=202)
 async def ingest(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    blob_url: str = Form(...),
     brand: str = Form(...),
     model: str = Form(...),
     year: str = Form(...),
     manual_type: str = Form("service_manual"),
     save_to_library: bool = Form(False),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-
-    _MANUALS_DIR.mkdir(parents=True, exist_ok=True)
-    contents = await file.read()
-
-    safe_name = Path(file.filename).stem[:60].replace(" ", "_") + ".pdf"
-    pdf_path = _MANUALS_DIR / safe_name
-    pdf_path.write_bytes(contents)
-
     doc_meta = {
         "bike_brand": brand,
         "bike_model": model,
@@ -280,7 +303,7 @@ async def ingest(
     }
 
     job_id = store.create_job()
-    background_tasks.add_task(_run_ingest, job_id, str(pdf_path), doc_meta)
+    background_tasks.add_task(_run_ingest_from_blob, job_id, blob_url, doc_meta)
     return {"job_id": job_id}
 
 

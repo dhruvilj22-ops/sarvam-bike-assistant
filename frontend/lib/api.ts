@@ -1,5 +1,15 @@
+import { upload } from "@vercel/blob/client";
+
 const BASE = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.NODE_ENV === "production" ? "/_/backend" : "http://localhost:8000");
+
+export async function uploadToBlob(file: File): Promise<string> {
+  const blob = await upload(file.name, file, {
+    access: "public",
+    handleUploadUrl: "/api/upload",
+  });
+  return blob.url;
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -46,9 +56,9 @@ export async function getStarters(documentId: string): Promise<{ starters: strin
 
 // ── Ingestion ─────────────────────────────────────────────────────────────────
 
-export async function extractMeta(file: File): Promise<MetaExtractResult> {
+export async function extractMeta(blobUrl: string): Promise<MetaExtractResult> {
   const form = new FormData();
-  form.append("file", file);
+  form.append("blob_url", blobUrl);
   const res = await fetch(`${BASE}/ingest/extract-meta`, { method: "POST", body: form });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -60,11 +70,11 @@ export async function extractMeta(file: File): Promise<MetaExtractResult> {
 }
 
 export async function ingestPdf(
-  file: File,
+  blobUrl: string,
   meta: { bike_brand: string; bike_model: string; bike_year: string; manual_type: string; save_to_library?: boolean }
 ): Promise<{ job_id: string }> {
   const form = new FormData();
-  form.append("file", file);
+  form.append("blob_url", blobUrl);
   form.append("brand", meta.bike_brand);
   form.append("model", meta.bike_model);
   form.append("year", meta.bike_year);

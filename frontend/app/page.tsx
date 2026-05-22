@@ -5,7 +5,7 @@ import {
   Bike, Upload, Library, ChevronRight, AlertCircle,
   CheckCircle2, Loader2, X, Wrench, Zap
 } from "lucide-react";
-import { getLibrary, ingestPdf, getIngestStatus, createSession, extractMeta, type BikeEntry } from "@/lib/api";
+import { getLibrary, ingestPdf, getIngestStatus, createSession, extractMeta, uploadToBlob, type BikeEntry } from "@/lib/api";
 
 const MANUAL_TYPES = [
   { value: "service_manual", label: "Service Manual" },
@@ -21,6 +21,7 @@ export default function HomePage() {
 
   // upload state
   const [file, setFile] = useState<File | null>(null);
+  const [blobUrl, setBlobUrl] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState(String(new Date().getFullYear()));
@@ -74,13 +75,13 @@ export default function HomePage() {
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || !brand || !model) return;
+    if (!blobUrl || !brand || !model) return;
     setUploading(true);
     setUploadError("");
     setProgress(0);
     setProgressMsg("Starting...");
     try {
-      const { job_id } = await ingestPdf(file, {
+      const { job_id } = await ingestPdf(blobUrl, {
         bike_brand: brand,
         bike_model: model,
         bike_year: year,
@@ -94,7 +95,7 @@ export default function HomePage() {
     }
   }
 
-  const uploadValid = file && brand.trim() && model.trim();
+  const uploadValid = blobUrl && brand.trim() && model.trim();
 
   return (
     <div className="min-h-full flex flex-col">
@@ -209,23 +210,26 @@ export default function HomePage() {
                         type="file"
                         accept=".pdf"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const f = e.target.files?.[0];
                           if (!f) return;
                           setFile(f);
+                          setBlobUrl("");
                           setUploadError("");
                           setExtracting(true);
-                          extractMeta(f)
-                            .then((meta) => {
-                              if (meta.bike_brand) setBrand(meta.bike_brand);
-                              if (meta.bike_model) setModel(meta.bike_model);
-                              if (meta.bike_year) setYear(meta.bike_year);
-                              if (meta.manual_type) setManualType(meta.manual_type);
-                            })
-                            .catch((err) => {
-                              setUploadError(err instanceof Error ? err.message : "Metadata extraction failed");
-                            })
-                            .finally(() => setExtracting(false));
+                          try {
+                            const url = await uploadToBlob(f);
+                            setBlobUrl(url);
+                            const meta = await extractMeta(url);
+                            if (meta.bike_brand) setBrand(meta.bike_brand);
+                            if (meta.bike_model) setModel(meta.bike_model);
+                            if (meta.bike_year) setYear(meta.bike_year);
+                            if (meta.manual_type) setManualType(meta.manual_type);
+                          } catch (err) {
+                            setUploadError(err instanceof Error ? err.message : "Metadata extraction failed");
+                          } finally {
+                            setExtracting(false);
+                          }
                         }}
                       />
                       {file ? (
