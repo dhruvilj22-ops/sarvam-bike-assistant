@@ -222,7 +222,9 @@ export default function HomePage() {
                               if (meta.bike_year) setYear(meta.bike_year);
                               if (meta.manual_type) setManualType(meta.manual_type);
                             })
-                            .catch(() => {/* user fills in manually */})
+                            .catch((err) => {
+                              setUploadError(err instanceof Error ? err.message : "Metadata extraction failed");
+                            })
                             .finally(() => setExtracting(false));
                         }}
                       />

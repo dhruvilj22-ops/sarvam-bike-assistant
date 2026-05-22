@@ -45,6 +45,8 @@ _KNOWN_MODEL_PATTERNS = [
     (r"\bns\s*200\b", "Pulsar NS200"),
     (r"\bapache\s*rtr\s*160\b", "Apache RTR 160"),
     (r"\brtr\s*160\b", "Apache RTR 160"),
+    (r"\bjupiter\s*125\b", "Jupiter 125"),
+    (r"\bjupiter\b", "Jupiter"),
 ]
 
 _EXTRACT_SYSTEM = """\

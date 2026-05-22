@@ -119,6 +119,14 @@ def test_mock_extract_detects_bajaj():
     assert result["bike_brand"] == "Bajaj"
 
 
+def test_fallback_extract_detects_tvs_jupiter_from_filename():
+    from routes.ingest import _fallback_extract
+
+    result = _fallback_extract("", "TVS Jupiter 125 - SMW.pdf")
+    assert result["bike_brand"] == "TVS"
+    assert result["bike_model"] == "Jupiter 125"
+
+
 def test_mock_extract_unknown_brand_returns_empty():
     result = _mock_extract("XYZ Motors Model 999 Technical Guide")
     assert result["bike_brand"] == ""

@@ -1,4 +1,5 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_URL
+  ?? (process.env.NODE_ENV === "production" ? "/_/backend" : "http://localhost:8000");
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -49,7 +50,10 @@ export async function extractMeta(file: File): Promise<MetaExtractResult> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${BASE}/ingest/extract-meta`, { method: "POST", body: form });
-  if (!res.ok) throw new Error("Metadata extraction failed");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message ?? "Metadata extraction failed");
+  }
   return res.json();
 }
 
