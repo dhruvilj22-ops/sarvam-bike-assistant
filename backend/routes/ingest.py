@@ -33,6 +33,20 @@ _BRAND_PATTERNS = {
     "triumph": "Triumph",
 }
 
+_KNOWN_MODEL_PATTERNS = [
+    (r"\bmeteor\s*350\b", "Meteor 350"),
+    (r"\bclassic\s*350\b", "Classic 350"),
+    (r"\bhimalayan\s*450\b", "Himalayan 450"),
+    (r"\bhimalayan\b", "Himalayan"),
+    (r"\bcb300r\b", "CB300R"),
+    (r"\br15\s*v?4\b", "R15 V4"),
+    (r"\br15\b", "R15"),
+    (r"\bpulsar\s*ns\s*200\b", "Pulsar NS200"),
+    (r"\bns\s*200\b", "Pulsar NS200"),
+    (r"\bapache\s*rtr\s*160\b", "Apache RTR 160"),
+    (r"\brtr\s*160\b", "Apache RTR 160"),
+]
+
 _EXTRACT_SYSTEM = """\
 You are given the title page and first few pages of a motorcycle service manual.
 Extract these fields from the text:
@@ -59,8 +73,76 @@ def _read_first_pages(pdf_bytes: bytes, max_pages: int = 3) -> str:
     return "\n".join(parts)[:4000]
 
 
+def _fallback_extract(text: str, filename: str = "", include_model: bool = True) -> dict:
+    """Deterministic extraction from title-page text and filename."""
+    combined = f"{text}\n{filename.replace('-', ' ').replace('_', ' ')}"
+    combined_lower = combined.lower()
+
+    brand = next(
+        (name for pattern, name in _BRAND_PATTERNS.items() if pattern in combined_lower),
+        "",
+    )
+
+    model = ""
+    if include_model:
+        model = next(
+            (name for pattern, name in _KNOWN_MODEL_PATTERNS if re.search(pattern, combined_lower, re.IGNORECASE)),
+            "",
+        )
+        if not model and brand:
+            brand_pattern = re.escape(brand).replace(r"\ ", r"\s+")
+            model_match = re.search(
+                rf"{brand_pattern}\s+([A-Z0-9][A-Z0-9\s-]{{2,40}}?)\s+"
+                r"(?:service|owner'?s?|user|workshop|manual|guide|\b20\d{2}\b)",
+                combined,
+                re.IGNORECASE,
+            )
+            if model_match:
+                model = re.sub(r"\s+", " ", model_match.group(1)).strip(" -")
+
+    years = re.findall(r"\b(20\d{2}|19\d{2})\b", combined)
+    year = years[-1] if years else ""
+    if "owner" in combined_lower:
+        manual_type = "owner_manual"
+    elif "user guide" in combined_lower:
+        manual_type = "user_guide"
+    else:
+        manual_type = "service_manual"
+
+    confidence = "low"
+    if brand and (model or year):
+        confidence = "medium"
+
+    return {
+        "bike_brand": brand,
+        "bike_model": model,
+        "bike_year": year,
+        "manual_type": manual_type,
+        "confidence": confidence,
+    }
+
+
 def _mock_extract(text: str) -> dict:
     """Regex-based extraction used in mock mode — no LLM call."""
+    return _fallback_extract(text, include_model=False)
+
+
+def _merge_meta(primary: dict, fallback: dict) -> dict:
+    """Prefer LLM fields, fill blanks from deterministic extraction."""
+    result = {
+        "bike_brand": primary.get("bike_brand", "") or fallback.get("bike_brand", ""),
+        "bike_model": primary.get("bike_model", "") or fallback.get("bike_model", ""),
+        "bike_year": primary.get("bike_year", "") or fallback.get("bike_year", ""),
+        "manual_type": primary.get("manual_type", "") or fallback.get("manual_type", "service_manual"),
+        "confidence": primary.get("confidence", "") or fallback.get("confidence", "low"),
+    }
+    if result["confidence"] == "high" and not result["bike_model"] and fallback.get("bike_model"):
+        result["confidence"] = "medium"
+    return result
+
+
+def _legacy_mock_extract(text: str) -> dict:
+    """Kept only to document the original mock behaviour."""
     text_lower = text.lower()
     brand = next(
         (name for pattern, name in _BRAND_PATTERNS.items() if pattern in text_lower),
@@ -153,13 +235,17 @@ async def extract_meta(file: UploadFile = File(...)):
     try:
         pdf_bytes = await file.read()
         text = _read_first_pages(pdf_bytes)
+        fallback = _fallback_extract(text, file.filename or "")
         if use_mocks or not os.getenv("OPENROUTER_API_KEY", "").strip():
             return _mock_extract(text)
-        return _llm_extract(text)
+        return _merge_meta(_llm_extract(text), fallback)
     except Exception as exc:
         logger.warning("extract-meta failed: %s", exc)
-        return {"bike_brand": "", "bike_model": "", "bike_year": "",
-                "manual_type": "service_manual", "confidence": "error"}
+        try:
+            return _fallback_extract(text if "text" in locals() else "", file.filename or "")
+        except Exception:
+            return {"bike_brand": "", "bike_model": "", "bike_year": "",
+                    "manual_type": "service_manual", "confidence": "error"}
 
 
 @router.post("/ingest", status_code=202)
