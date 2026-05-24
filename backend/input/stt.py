@@ -13,7 +13,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-STT_CONFIDENCE_THRESHOLD = 0.7
+STT_CONFIDENCE_THRESHOLD = float(os.getenv("STT_CONFIDENCE_THRESHOLD", "0.7"))
 
 # ISO 639-1 and BCP-47 codes considered Indic
 INDIC_LANGS = {
@@ -53,6 +53,13 @@ def _transcribe_sarvam(audio_bytes: bytes, language_hint: str = "hi-IN") -> Dict
     data = resp.json()
     transcript = data.get("transcript", "")
     confidence = 0.85  # Sarvam doesn't return confidence; use a safe default
+    logger.info(
+        "stt_engine_result engine=sarvam language_hint=%s transcript_chars=%s confidence=%.3f threshold=%.3f",
+        language_hint,
+        len(transcript or ""),
+        confidence,
+        STT_CONFIDENCE_THRESHOLD,
+    )
     return {
         "transcript": transcript,
         "language": data.get("language_code", lang_code).split("-")[0],
@@ -87,6 +94,17 @@ def _transcribe_whisper(audio_bytes: bytes, filename: str = "audio.wav") -> Dict
     confidence = min(1.0, max(0.0, math.exp(log_prob)))
     lang = getattr(result, "language", "en")
     transcript = getattr(result, "text", "") or ""
+    logger.info(
+        "stt_engine_result engine=whisper filename=%s content_type=%s language=%s transcript_chars=%s segments=%s avg_logprob=%.4f confidence=%.3f threshold=%.3f",
+        filename,
+        content_type,
+        lang,
+        len(transcript or ""),
+        len(segments),
+        float(log_prob),
+        float(confidence),
+        STT_CONFIDENCE_THRESHOLD,
+    )
     return {
         "transcript": transcript,
         "language": lang,
@@ -108,9 +126,23 @@ def transcribe(
     """
     if use_mocks:
         is_indic = language_hint in INDIC_LANGS or "hindi" in filename.lower()
+        logger.info(
+            "stt_mock_route language_hint=%s filename=%s engine=%s",
+            language_hint,
+            filename,
+            "sarvam" if is_indic else "whisper",
+        )
         return _MOCK_HINDI if is_indic else _MOCK_ENGLISH
 
     is_indic = language_hint in INDIC_LANGS
+    logger.info(
+        "stt_route language_hint=%s filename=%s bytes=%s is_indic_hint=%s threshold=%.3f",
+        language_hint,
+        filename,
+        len(audio_bytes),
+        is_indic,
+        STT_CONFIDENCE_THRESHOLD,
+    )
     try:
         if is_indic:
             return _transcribe_sarvam(audio_bytes, language_hint)
@@ -123,6 +155,13 @@ def transcribe(
                     return _transcribe_sarvam(audio_bytes, result["language"])
                 except Exception as e:
                     logger.warning("Sarvam fallback failed: %s — using Whisper result", e)
+            logger.info(
+                "stt_decision engine=%s transcript_chars=%s confidence=%.3f needs_retry=%s",
+                result.get("engine"),
+                len((result.get("transcript") or "")),
+                float(result.get("confidence", 0.0)),
+                bool(result.get("needs_retry")),
+            )
             return result
     except Exception as exc:
         logger.exception("STT failed")
