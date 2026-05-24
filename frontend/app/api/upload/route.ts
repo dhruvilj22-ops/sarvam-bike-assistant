@@ -25,7 +25,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => {
+      onBeforeGenerateToken: async (params) => {
+        console.info("[upload-token] token-params", {
+          traceId,
+          pathname: params.pathname,
+          contentType: params.contentType,
+          clientPayload: params.clientPayload,
+        });
         // Some browsers/filesystems send PDFs as application/octet-stream.
         // Allow both so valid PDF uploads don't fail with Blob 400.
         return {
