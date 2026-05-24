@@ -11,6 +11,7 @@ import tempfile
 import urllib.request
 from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
+import requests
 
 import store
 
@@ -70,7 +71,10 @@ def _download_blob(blob_url: str) -> str:
     suffix = ".pdf"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix, dir="/tmp")
     os.close(fd)
-    urllib.request.urlretrieve(blob_url, tmp_path)
+    resp = requests.get(blob_url, timeout=60)
+    resp.raise_for_status()
+    with open(tmp_path, "wb") as f:
+        f.write(resp.content)
     return tmp_path
 
 
@@ -274,7 +278,8 @@ async def extract_meta(blob_url: str = Form(...)):
     except Exception as exc:
         logger.warning("extract-meta failed: %s", exc)
         try:
-            return _fallback_extract(text if "text" in locals() else "", "")
+            filename = blob_url.split("/")[-1] if blob_url else ""
+            return _fallback_extract(text if "text" in locals() else "", filename)
         except Exception:
             return {"bike_brand": "", "bike_model": "", "bike_year": "",
                     "manual_type": "service_manual", "confidence": "error"}
