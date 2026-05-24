@@ -16,15 +16,23 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
   const hasBlobStoreId = Boolean(process.env.BLOB_STORE_ID);
+  const bodyInfo = {
+    pathname: (body as { pathname?: string }).pathname,
+    contentType: (body as { contentType?: string }).contentType,
+  };
 
   try {
     const jsonResponse = await handleUpload({
       body,
       request,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["application/pdf"],
-        maximumSizeInBytes: 50 * 1024 * 1024,
-      }),
+      onBeforeGenerateToken: async () => {
+        // Some browsers/filesystems send PDFs as application/octet-stream.
+        // Allow both so valid PDF uploads don't fail with Blob 400.
+        return {
+          allowedContentTypes: ["application/pdf", "application/octet-stream"],
+          maximumSizeInBytes: 50 * 1024 * 1024,
+        };
+      },
       onUploadCompleted: async () => {},
     });
     console.info("[upload-token] success", {
@@ -32,6 +40,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       pathname: new URL(request.url).pathname,
       hasBlobToken,
       hasBlobStoreId,
+      bodyInfo,
     });
     return NextResponse.json(jsonResponse, {
       headers: { "x-trace-id": traceId },
@@ -42,6 +51,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       pathname: new URL(request.url).pathname,
       hasBlobToken,
       hasBlobStoreId,
+      bodyInfo,
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
