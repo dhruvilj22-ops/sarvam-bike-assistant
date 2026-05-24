@@ -85,6 +85,16 @@ def _ensure_collection(client: QdrantClient, dim: int) -> None:
             _COLLECTION,
             vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
         )
+    # Needed for reliable filtering by document_id on some Qdrant Cloud setups.
+    try:
+        client.create_payload_index(
+            collection_name=_COLLECTION,
+            field_name="document_id",
+            field_schema="keyword",
+        )
+    except Exception:
+        # Index may already exist or method may differ by client version.
+        pass
 
 
 def build_indexes(chunks: List[Dict], document_id: str) -> Dict:
@@ -150,21 +160,45 @@ def vector_search(
         )
         return [(r.payload, r.score) for r in result.points]
     except Exception as exc:
-        logger.warning("qdrant query_points failed; falling back to search: %s", exc)
+        logger.warning("qdrant query_points failed; falling back to compatibility path: %s", exc)
         try:
-            # Compatibility fallback for clusters/versions where /points/query rejects payload.
-            result = client.search(
+            # Some qdrant-client versions expose only query_points (no search()).
+            # Fall back to unfiltered vector query, then filter in-app.
+            result = client.query_points(
                 collection_name=_COLLECTION,
-                query_vector=query_vector,
-                query_filter=Filter(
-                    must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
-                ),
-                limit=top_k,
+                query=query_vector,
+                limit=max(top_k * 20, 100),
                 with_payload=True,
             )
-            return [(r.payload, r.score) for r in result]
+            filtered: List[Tuple[Dict, float]] = []
+            for r in result.points:
+                payload = r.payload or {}
+                if payload.get("document_id") == document_id:
+                    filtered.append((payload, r.score))
+                if len(filtered) >= top_k:
+                    break
+            if filtered:
+                return filtered
+            # Last resort: scroll payloads and keep this doc's chunks so reranker can still work.
+            rows, _ = client.scroll(
+                collection_name=_COLLECTION,
+                with_payload=True,
+                with_vectors=False,
+                limit=5000,
+            )
+            scroll_hits = []
+            for p in rows:
+                payload = getattr(p, "payload", {}) or {}
+                if payload.get("document_id") == document_id:
+                    scroll_hits.append((payload, 0.01))
+                if len(scroll_hits) >= top_k:
+                    break
+            if scroll_hits:
+                logger.warning("qdrant_vector_fallback_used mode=scroll document_id=%s hits=%s", document_id, len(scroll_hits))
+                return scroll_hits
+            return []
         except Exception as fallback_exc:
-            logger.error("qdrant search fallback failed: %s", fallback_exc)
+            logger.error("qdrant compatibility fallback failed: %s", fallback_exc)
             return []
 
 
