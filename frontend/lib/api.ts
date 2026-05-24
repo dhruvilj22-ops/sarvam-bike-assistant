@@ -4,9 +4,13 @@ const BASE = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.NODE_ENV === "production" ? "/_/backend" : "http://localhost:8000");
 
 export async function uploadToBlob(file: File): Promise<string> {
-  const blob = await upload(file.name, file, {
+  const dot = file.name.lastIndexOf(".");
+  const base = dot > 0 ? file.name.slice(0, dot) : file.name;
+  const ext = dot > 0 ? file.name.slice(dot) : "";
+  const uniqueName = `${base}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+
+  const blob = await upload(uniqueName, file, {
     access: "public",
-    addRandomSuffix: true,
     handleUploadUrl: "/api/upload",
   });
   return blob.url;
