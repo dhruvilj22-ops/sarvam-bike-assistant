@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 from fastapi import APIRouter
+import store
 
 router = APIRouter()
 
@@ -54,6 +55,18 @@ def _chapter_to_question(title: str) -> str:
 
 @router.get("/bikes/library")
 def library():
+    # Primary: durable Supabase-backed document metadata store.
+    supabase_rows = store.list_library_documents()
+    if supabase_rows:
+        # Dedup: same brand + model + manual_type → keep most recent entry.
+        seen: dict = {}
+        for b in supabase_rows:
+            key = (b["bike_brand"].lower(), b["bike_model"].lower(), b["manual_type"])
+            if key not in seen or b["ingestion_timestamp"] > seen[key]["ingestion_timestamp"]:
+                seen[key] = b
+        return {"bikes": list(seen.values())}
+
+    # Fallback: local index JSON files (dev / non-Supabase mode).
     raw = []
     if _INDEX_DIR.exists():
         for path in sorted(_INDEX_DIR.glob("*_index.json")):
@@ -87,12 +100,17 @@ def library():
 @router.get("/bikes/{document_id}/starters")
 def get_starters(document_id: str):
     """Return 4 suggested questions derived from this manual's chapter titles."""
-    index_path = _INDEX_DIR / f"{document_id}_index.json"
-    if not index_path.exists():
-        return {"starters": _FALLBACK_STARTERS}
+    data = store.get_document_index(document_id)
+    if data is None:
+        index_path = _INDEX_DIR / f"{document_id}_index.json"
+        if not index_path.exists():
+            return {"starters": _FALLBACK_STARTERS}
+        try:
+            data = json.loads(index_path.read_text())
+        except Exception:
+            return {"starters": _FALLBACK_STARTERS}
 
     try:
-        data = json.loads(index_path.read_text())
         chapters = data.get("chapters", [])
 
         # Skip generic front-matter chapters

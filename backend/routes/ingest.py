@@ -253,7 +253,8 @@ def _run_ingest(job_id: str, pdf_path: str, doc_meta: dict) -> None:
 
         stage = "document_index"
         from ingestion.document_index import generate_document_index
-        generate_document_index(document_id, doc_meta, embedded)
+        index = generate_document_index(document_id, doc_meta, embedded)
+        store.save_document_index(index)
 
         store.update_job(
             job_id,
