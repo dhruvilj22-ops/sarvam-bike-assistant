@@ -22,7 +22,6 @@ from inference.history import add_turn, get_context_history, reset_thread
 from inference.reranker import rerank
 from inference.retriever import retrieve
 
-CONFIDENCE_THRESHOLD = 0.35
 logger = logging.getLogger(__name__)
 
 
@@ -38,12 +37,18 @@ def run_query(
     """
     if use_mocks is None:
         use_mocks = os.getenv("USE_MOCKS", "false").lower() == "true"
+    confidence_threshold = float(os.getenv("RAG_CONF_THRESHOLD", "0.35"))
+    rerank_k = int(os.getenv("RAG_RERANK_K", "8"))
+    final_top_n = int(os.getenv("RAG_TOP_N", "3"))
     logger.info(
-        "pipeline_start thread_id=%s document_id=%s query_chars=%s use_mocks=%s",
+        "pipeline_start thread_id=%s document_id=%s query_chars=%s use_mocks=%s conf_threshold=%.3f rerank_k=%s final_top_n=%s",
         thread_id,
         document_id,
         len(query or ""),
         use_mocks,
+        confidence_threshold,
+        rerank_k,
+        final_top_n,
     )
 
     # Step 1: Query expansion + intent classification
@@ -62,7 +67,7 @@ def run_query(
         query=expanded["expanded"],
         document_id=document_id,
         intent=intent,
-        top_k=7,
+        top_k=max(rerank_k, final_top_n),
         use_mocks=use_mocks,
     )
     logger.info(
@@ -90,19 +95,20 @@ def run_query(
         logger.warning("pipeline_no_results thread_id=%s", thread_id)
         return result
 
-    # Step 4: Rerank to top 5
+    # Step 4: Rerank candidate pool then keep final top N for generation
     chunks_only = [c for c, _ in chunks_with_scores]
-    reranked = rerank(expanded["expanded"], chunks_only, top_n=5, use_mocks=use_mocks)
+    reranked = rerank(expanded["expanded"], chunks_only, top_n=rerank_k, use_mocks=use_mocks)
+    reranked = reranked[:final_top_n]
     logger.info("pipeline_rerank thread_id=%s reranked=%s", thread_id, len(reranked))
 
     # Step 5: Confidence gate
     top_score = reranked[0][1] if reranked else 0.0
-    context_confidence = "low" if top_score < CONFIDENCE_THRESHOLD else "high"
+    context_confidence = "low" if top_score < confidence_threshold else "high"
     logger.info(
         "pipeline_confidence_gate thread_id=%s top_score=%.4f threshold=%.2f context_confidence=%s",
         thread_id,
         float(top_score),
-        CONFIDENCE_THRESHOLD,
+        confidence_threshold,
         context_confidence,
     )
 

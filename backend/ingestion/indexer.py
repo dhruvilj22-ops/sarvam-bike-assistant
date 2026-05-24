@@ -58,6 +58,15 @@ def get_qdrant_client() -> QdrantClient:
                 )
                 # Force a lightweight call so config/cert/path errors surface now.
                 _qdrant_client.get_collections()
+                # Self-heal payload index on startup so retrieval filters don't fail.
+                try:
+                    _qdrant_client.create_payload_index(
+                        collection_name=_COLLECTION,
+                        field_name="document_id",
+                        field_schema="keyword",
+                    )
+                except Exception:
+                    pass
                 logger.info("qdrant_init_success mode=remote")
             except Exception:
                 logger.exception("qdrant_init_failed mode=remote, falling_back=memory")

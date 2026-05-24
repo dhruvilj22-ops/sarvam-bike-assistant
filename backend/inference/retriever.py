@@ -47,14 +47,16 @@ def retrieve(
     """
     Return top_k (chunk, rrf_score) pairs merged from vector + BM25.
     """
+    default_vec_k = int(os.getenv("RAG_VEC_K", "20"))
+    default_bm25_k = int(os.getenv("RAG_BM25_K", "20"))
     if intent == "specification":
-        vec_k, bm25_k = 4, 10
+        vec_k, bm25_k = max(8, default_vec_k // 2), max(default_bm25_k, default_vec_k)
     elif intent == "procedure":
-        vec_k, bm25_k = 10, 4
+        vec_k, bm25_k = max(default_vec_k, default_bm25_k // 2), max(8, default_bm25_k // 2)
     elif intent == "diagnostic":
-        vec_k, bm25_k = 9, 5
+        vec_k, bm25_k = default_vec_k, max(10, default_bm25_k // 2)
     else:
-        vec_k, bm25_k = 7, 7
+        vec_k, bm25_k = default_vec_k, default_bm25_k
 
     if use_mocks:
         from ingestion.embedder import _MOCK_VECTOR
@@ -72,8 +74,9 @@ def retrieve(
     bm25_results = bm25_search(query.lower().split(), document_id, top_k=bm25_k)
 
     merged = _rrf_merge(vec_results, bm25_results)
+    safe_top_k = int(os.getenv("RAG_TOP_K", str(top_k)))
     logger.info(
-        "retrieve_summary document_id=%s intent=%s vec_k=%s bm25_k=%s vec_hits=%s bm25_hits=%s merged_hits=%s",
+        "retrieve_summary document_id=%s intent=%s vec_k=%s bm25_k=%s vec_hits=%s bm25_hits=%s merged_hits=%s return_top_k=%s",
         document_id,
         intent,
         vec_k,
@@ -81,6 +84,7 @@ def retrieve(
         len(vec_results),
         len(bm25_results),
         len(merged),
+        safe_top_k,
     )
     for i, (chunk, score) in enumerate(merged[:3], start=1):
         logger.info(
@@ -91,4 +95,4 @@ def retrieve(
             chunk.get("section_number", ""),
             float(score),
         )
-    return merged[:top_k]
+    return merged[:safe_top_k]
