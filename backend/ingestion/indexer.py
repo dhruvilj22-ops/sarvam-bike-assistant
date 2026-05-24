@@ -6,6 +6,7 @@ Hybrid BM25 + dense retrieval: BM25 handles exact part codes/specs, semantic han
 import os
 import pickle
 import urllib.parse
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -25,6 +26,7 @@ _ROOT = Path(__file__).parent.parent.parent
 _INDEX_DIR = Path(os.getenv("INDEX_DIR", str(_ROOT / "data" / "indexes")))
 
 _qdrant_client: Optional[QdrantClient] = None
+logger = logging.getLogger(__name__)
 
 
 def get_qdrant_client() -> QdrantClient:
@@ -32,16 +34,26 @@ def get_qdrant_client() -> QdrantClient:
     if _qdrant_client is None:
         url = os.getenv("QDRANT_URL", "").strip().rstrip("/")
         if url:
-            # Qdrant Cloud uses port 443 (HTTPS), not the self-hosted default 6333.
-            # qdrant_client ignores the URL scheme and falls back to 6333 unless told explicitly.
-            parsed = urllib.parse.urlparse(url)
-            port = parsed.port or (443 if parsed.scheme == "https" else 6333)
-            _qdrant_client = QdrantClient(
-                url=url,
-                port=port,
-                api_key=os.getenv("QDRANT_API_KEY") or None,
-            )
+            try:
+                logger.info("qdrant_init mode=remote url=%s", url)
+                # Qdrant Cloud uses port 443 (HTTPS), not the self-hosted default 6333.
+                # qdrant_client ignores the URL scheme and falls back to 6333 unless told explicitly.
+                parsed = urllib.parse.urlparse(url)
+                port = parsed.port or (443 if parsed.scheme == "https" else 6333)
+                _qdrant_client = QdrantClient(
+                    url=url,
+                    port=port,
+                    api_key=os.getenv("QDRANT_API_KEY") or None,
+                )
+                # Force a lightweight call so config/cert/path errors surface now.
+                _qdrant_client.get_collections()
+                logger.info("qdrant_init_success mode=remote")
+            except Exception:
+                logger.exception("qdrant_init_failed mode=remote, falling_back=memory")
+                _qdrant_client = QdrantClient(":memory:")
+                logger.info("qdrant_init_success mode=memory")
         else:
+            logger.info("qdrant_init mode=memory reason=no_qdrant_url")
             _qdrant_client = QdrantClient(":memory:")
     return _qdrant_client
 
