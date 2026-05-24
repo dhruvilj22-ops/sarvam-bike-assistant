@@ -224,28 +224,34 @@ def _run_ingest_from_blob(job_id: str, blob_url: str, doc_meta: dict) -> None:
 
 def _run_ingest(job_id: str, pdf_path: str, doc_meta: dict) -> None:
     use_mocks = os.getenv("USE_MOCKS", "false").lower() == "true"
+    stage = "initializing"
     try:
+        stage = "read_pdf"
         store.update_job(job_id, status="processing", progress_pct=10, message="Reading your PDF...")
 
         from ingestion.parser import parse_pdf
         parsed = parse_pdf(pdf_path, doc_meta, use_mocks=use_mocks)
         document_id = parsed["document_id"]
 
+        stage = "chunking"
         store.update_job(job_id, status="processing", progress_pct=35, message="Splitting into sections...")
 
         from ingestion.chunker import chunk_blocks
         chunks = chunk_blocks(parsed["blocks"], doc_meta, document_id)
 
+        stage = "embedding"
         store.update_job(job_id, status="processing", progress_pct=60, message="Analysing content...")
 
         from ingestion.embedder import embed_chunks
         embedded = embed_chunks(list(chunks), use_mocks=use_mocks)
 
+        stage = "indexing"
         store.update_job(job_id, status="processing", progress_pct=85, message="Building search index...")
 
         from ingestion.indexer import build_indexes
         build_indexes(embedded, document_id)
 
+        stage = "document_index"
         from ingestion.document_index import generate_document_index
         generate_document_index(document_id, doc_meta, embedded)
 
@@ -257,7 +263,9 @@ def _run_ingest(job_id: str, pdf_path: str, doc_meta: dict) -> None:
             document_id=document_id,
         )
     except Exception as exc:
-        store.update_job(job_id, status="error", progress_pct=0, message=str(exc))
+        logger.exception("ingest failed at stage=%s job_id=%s", stage, job_id)
+        detail = f"Ingestion failed at '{stage}': {exc!r}"
+        store.update_job(job_id, status="error", progress_pct=0, message=detail)
 
 
 @router.post("/ingest/extract-meta")
