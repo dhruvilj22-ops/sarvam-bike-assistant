@@ -154,6 +154,9 @@ def _chunk_specification(block: Dict, doc_meta: Dict, document_id: str) -> List[
     table = block.get("table_data", {})
     rows = table.get("rows", [])
     base = _base_meta(block, doc_meta, document_id)
+    # Ensure specs always carry a meaningful section label for citations.
+    if not base.get("section_title"):
+        base["section_title"] = table.get("table_title", "") or base.get("chapter_title", "")
     chunks = []
 
     for row in rows:

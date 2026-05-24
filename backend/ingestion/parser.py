@@ -105,6 +105,7 @@ def parse_pdf(
     blocks: List[Dict] = []
     current_chapter = {"number": "", "title": ""}
     current_section = {"number": "", "title": ""}
+    page_context: Dict[int, Dict[str, str]] = {}
 
     for page_num, page in enumerate(doc, start=1):
         # Extract images first, keyed by block number to avoid duplicates
@@ -184,6 +185,14 @@ def parse_pdf(
                 "section_title": current_section["title"],
             })
 
+        # Capture best-known chapter/section context for this page.
+        page_context[page_num] = {
+            "chapter_number": current_chapter["number"],
+            "chapter_title": current_chapter["title"],
+            "section_number": current_section["number"],
+            "section_title": current_section["title"],
+        }
+
     doc.close()
 
     # Post-process: group consecutive single-step prose blocks into a procedure block.
@@ -216,6 +225,9 @@ def parse_pdf(
 
     for table in tables:
         rows = table.get("rows", [])
+        page_number = table.get("page_number", 0)
+        ctx = page_context.get(page_number, {})
+        section_title = ctx.get("section_title", "") or table.get("table_title", "")
         text = table.get("table_title", "Table") + ": " + "; ".join(
             f"{r.get('component', '')}: {next((v for k, v in r.items() if k != 'component'), '')}"
             for r in rows
@@ -224,11 +236,11 @@ def parse_pdf(
             "content_type": ContentType.SPECIFICATION,
             "text": text,
             "table_data": table,
-            "page_number": table.get("page_number", 0),
-            "chapter_number": "",
-            "chapter_title": "",
-            "section_number": "",
-            "section_title": table.get("table_title", ""),
+            "page_number": page_number,
+            "chapter_number": ctx.get("chapter_number", ""),
+            "chapter_title": ctx.get("chapter_title", ""),
+            "section_number": ctx.get("section_number", ""),
+            "section_title": section_title,
         })
 
     return {"document_id": document_id, "blocks": blocks}

@@ -17,8 +17,11 @@ _WARNING_RE = re.compile(r'^\s*(WARNING|CAUTION|NOTE)[:\s]', re.IGNORECASE)
 _STEP_RE = re.compile(r'^\s*\d+[\.\)]\s+\w', re.MULTILINE)
 # Inline steps: "1. Do X 2. Do Y 3. Do Z" (PyMuPDF sometimes collapses newlines)
 _INLINE_STEP_RE = re.compile(r'\b1[\.\)]\s+\w.{5,}\s+2[\.\)]\s+\w.{5,}\s+3[\.\)]\s+\w')
-# Matches "1", "1.2", "1.2.3" followed by uppercase title
-_HEADING_RE = re.compile(r'^(\d+(?:\.\d+)*)\s+([A-Z][A-Z\s\-/]{2,})\s*$')
+# Matches headings like:
+# "1 INTRODUCTION", "2.3 Location of Key Parts", "3-1 Engine Oil"
+_HEADING_RE = re.compile(
+    r'^(\d+(?:[.\-]\d+)*)\s+([A-Za-z][A-Za-z0-9\s\-/,&()]{2,})\s*$'
+)
 
 
 def classify_text(text: str) -> ContentType:
@@ -33,5 +36,6 @@ def parse_heading(text: str):
     """Return (section_number, title) if text looks like a section heading, else (None, None)."""
     m = _HEADING_RE.match(text.strip())
     if m:
-        return m.group(1), m.group(2).strip().title()
+        title = re.sub(r"\s+", " ", m.group(2)).strip()
+        return m.group(1), title
     return None, None
