@@ -3,6 +3,15 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request): Promise<NextResponse> {
   const traceId = crypto.randomUUID();
+
+  // Accept either env naming style and normalize for Blob SDK runtime expectations.
+  if (!process.env.BLOB_READ_WRITE_TOKEN && process.env.PUBLIC_READ_WRITE_TOKEN) {
+    process.env.BLOB_READ_WRITE_TOKEN = process.env.PUBLIC_READ_WRITE_TOKEN;
+  }
+  if (!process.env.BLOB_STORE_ID && process.env.PUBLIC_STORE_ID) {
+    process.env.BLOB_STORE_ID = process.env.PUBLIC_STORE_ID;
+  }
+
   let body: HandleUploadBody;
   try {
     body = (await request.json()) as HandleUploadBody;
@@ -16,6 +25,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
   const hasBlobStoreId = Boolean(process.env.BLOB_STORE_ID);
+  const envSource = {
+    token: process.env.BLOB_READ_WRITE_TOKEN ? "BLOB_READ_WRITE_TOKEN" : (process.env.PUBLIC_READ_WRITE_TOKEN ? "PUBLIC_READ_WRITE_TOKEN" : "missing"),
+    store: process.env.BLOB_STORE_ID ? "BLOB_STORE_ID" : (process.env.PUBLIC_STORE_ID ? "PUBLIC_STORE_ID" : "missing"),
+  };
   const bodyInfo = {
     pathname: (body as { pathname?: string }).pathname,
     contentType: (body as { contentType?: string }).contentType,
@@ -54,6 +67,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       pathname: new URL(request.url).pathname,
       hasBlobToken,
       hasBlobStoreId,
+      envSource,
       bodyInfo,
     });
     return NextResponse.json(jsonResponse, {
@@ -65,6 +79,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       pathname: new URL(request.url).pathname,
       hasBlobToken,
       hasBlobStoreId,
+      envSource,
       bodyInfo,
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
