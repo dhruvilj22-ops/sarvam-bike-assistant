@@ -90,6 +90,15 @@ export default function HomePage() {
       });
       setJobId(job_id);
     } catch (err: unknown) {
+      console.error("[ingest] failed to start ingestion", {
+        blobUrl,
+        brand,
+        model,
+        year,
+        manualType,
+        saveToLibrary,
+        error: err instanceof Error ? err.message : String(err),
+      });
       setUploadError(err instanceof Error ? err.message : "Upload failed");
       setUploading(false);
     }
@@ -226,6 +235,12 @@ export default function HomePage() {
                             if (meta.bike_year) setYear(meta.bike_year);
                             if (meta.manual_type) setManualType(meta.manual_type);
                           } catch (err) {
+                            console.error("[upload] blob or metadata extraction failed", {
+                              fileName: f.name,
+                              fileSizeBytes: f.size,
+                              fileType: f.type,
+                              error: err instanceof Error ? err.message : String(err),
+                            });
                             setUploadError(err instanceof Error ? err.message : "Metadata extraction failed");
                           } finally {
                             setExtracting(false);

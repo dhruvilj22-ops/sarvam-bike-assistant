@@ -18,7 +18,9 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message ?? res.statusText);
+    const traceId = res.headers.get("x-trace-id");
+    const message = err.message ?? res.statusText;
+    throw new Error(traceId ? `${message} (trace: ${traceId})` : message);
   }
   return res.json();
 }
@@ -64,6 +66,8 @@ export async function extractMeta(blobUrl: string): Promise<MetaExtractResult> {
     const body = await res.text().catch(() => "");
     let message = res.statusText || `HTTP ${res.status}`;
     try { message = JSON.parse(body).message ?? message; } catch { if (body) message = `${res.status}: ${body.slice(0, 120)}`; }
+    const traceId = res.headers.get("x-trace-id");
+    if (traceId) message = `${message} (trace: ${traceId})`;
     throw new Error(message);
   }
   return res.json();
@@ -85,6 +89,8 @@ export async function ingestPdf(
     const body = await res.text().catch(() => "");
     let message = res.statusText || `HTTP ${res.status}`;
     try { message = JSON.parse(body).message ?? message; } catch { if (body) message = `${res.status}: ${body.slice(0, 120)}`; }
+    const traceId = res.headers.get("x-trace-id");
+    if (traceId) message = `${message} (trace: ${traceId})`;
     throw new Error(message);
   }
   return res.json();
@@ -113,7 +119,11 @@ export async function transcribeVoice(
   if (languageHint) form.append("language_hint", languageHint);
   if (sessionId) form.append("session_id", sessionId);
   const res = await fetch(`${BASE}/input/voice`, { method: "POST", body: form });
-  if (!res.ok) throw new Error((await res.json()).message ?? "STT failed");
+  if (!res.ok) {
+    const msg = (await res.json()).message ?? "STT failed";
+    const traceId = res.headers.get("x-trace-id");
+    throw new Error(traceId ? `${msg} (trace: ${traceId})` : msg);
+  }
   return res.json();
 }
 
@@ -123,7 +133,11 @@ export async function describeImage(file: File): Promise<ImageResponse> {
   const form = new FormData();
   form.append("image", file);
   const res = await fetch(`${BASE}/input/image`, { method: "POST", body: form });
-  if (!res.ok) throw new Error((await res.json()).message ?? "Image failed");
+  if (!res.ok) {
+    const msg = (await res.json()).message ?? "Image failed";
+    const traceId = res.headers.get("x-trace-id");
+    throw new Error(traceId ? `${msg} (trace: ${traceId})` : msg);
+  }
   return res.json();
 }
 

@@ -2,7 +2,21 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const body = (await request.json()) as HandleUploadBody;
+  const traceId = crypto.randomUUID();
+  let body: HandleUploadBody;
+  try {
+    body = (await request.json()) as HandleUploadBody;
+  } catch (error) {
+    console.error("[upload-token] invalid json body", {
+      traceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NextResponse.json({ error: "Invalid upload payload", traceId }, { status: 400 });
+  }
+
+  const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  const hasBlobStoreId = Boolean(process.env.BLOB_STORE_ID);
+
   try {
     const jsonResponse = await handleUpload({
       body,
@@ -13,8 +27,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       }),
       onUploadCompleted: async () => {},
     });
-    return NextResponse.json(jsonResponse);
+    console.info("[upload-token] success", {
+      traceId,
+      pathname: new URL(request.url).pathname,
+      hasBlobToken,
+      hasBlobStoreId,
+    });
+    return NextResponse.json(jsonResponse, {
+      headers: { "x-trace-id": traceId },
+    });
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
+    console.error("[upload-token] failed", {
+      traceId,
+      pathname: new URL(request.url).pathname,
+      hasBlobToken,
+      hasBlobStoreId,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Upload token generation failed", traceId },
+      { status: 400, headers: { "x-trace-id": traceId } },
+    );
   }
 }

@@ -1,5 +1,8 @@
 import os
 import sys
+import logging
+import time
+import uuid
 from pathlib import Path
 
 # Ensure backend/ is on the path so ingestion.* and inference.* imports resolve
@@ -19,6 +22,12 @@ from routes.query import router as query_router
 from routes.session import router as session_router
 
 app = FastAPI(title="Bike Troubleshooting Assistant")
+logger = logging.getLogger("bike-assistant")
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
 
 _ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -34,6 +43,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    trace_id = request.headers.get("x-trace-id") or str(uuid.uuid4())
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = int((time.perf_counter() - start) * 1000)
+        logger.exception(
+            "request_failed trace_id=%s method=%s path=%s duration_ms=%s",
+            trace_id,
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = int((time.perf_counter() - start) * 1000)
+    response.headers["x-trace-id"] = trace_id
+    logger.info(
+        "request trace_id=%s method=%s path=%s status=%s duration_ms=%s",
+        trace_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
 
 # ---------------------------------------------------------------------------
 # Health — registered first so wildcard SPA handler never shadows it
@@ -62,6 +101,8 @@ app.include_router(output_router)
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
+    trace_id = request.headers.get("x-trace-id", "")
+    logger.warning("validation_error trace_id=%s path=%s detail=%s", trace_id, request.url.path, exc.errors())
     return JSONResponse(
         status_code=422,
         content={
@@ -69,23 +110,28 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
             "message": "Request validation failed",
             "code": "VALIDATION_ERROR",
             "detail": exc.errors(),
+            "trace_id": trace_id,
         },
     )
 
 
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
+    trace_id = request.headers.get("x-trace-id", "")
+    logger.warning("not_found trace_id=%s path=%s detail=%s", trace_id, request.url.path, getattr(exc, "detail", ""))
     return JSONResponse(
         status_code=404,
-        content={"error": True, "message": str(exc.detail), "code": "NOT_FOUND"},
+        content={"error": True, "message": str(exc.detail), "code": "NOT_FOUND", "trace_id": trace_id},
     )
 
 
 @app.exception_handler(400)
 async def bad_request_handler(request: Request, exc):
+    trace_id = request.headers.get("x-trace-id", "")
+    logger.warning("bad_request trace_id=%s path=%s detail=%s", trace_id, request.url.path, getattr(exc, "detail", ""))
     return JSONResponse(
         status_code=400,
-        content={"error": True, "message": str(exc.detail), "code": "BAD_REQUEST"},
+        content={"error": True, "message": str(exc.detail), "code": "BAD_REQUEST", "trace_id": trace_id},
     )
 
 

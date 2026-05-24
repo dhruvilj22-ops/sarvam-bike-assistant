@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "export",          // static export for FastAPI serving
-  trailingSlash: true,       // /chat/ instead of /chat for static routing
-  images: { unoptimized: true }, // no Next.js image server in static mode
+  // Vercel runtime deployment needs Next server functions (e.g. /api/upload)
+  // so we must not use static export mode.
+  trailingSlash: false,
 };
 
 export default nextConfig;
