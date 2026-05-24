@@ -1,11 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Play, Pause, Volume2, AlertTriangle, Bot, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import SeverityBadge from "./SeverityBadge";
 import CitationBlock from "./CitationBlock";
 import FollowupChips from "./FollowupChips";
-import type { QueryResponse } from "@/lib/api";
+import { synthesizeSpeech, type QueryResponse } from "@/lib/api";
 
 interface Message {
   role: "user" | "assistant";
@@ -108,7 +108,7 @@ function AssistantExtras({
       </div>
 
       {/* TTS player */}
-      {response.tts && <TTSPlayer text={response.tts.text} />}
+      {response.tts && <TTSPlayer text={response.tts.text} language={response.language || "en"} />}
 
       {/* Citations */}
       {response.citations?.length > 0 && (
@@ -127,21 +127,60 @@ function AssistantExtras({
   );
 }
 
-function TTSPlayer({ text }: { text: string }) {
+function TTSPlayer({ text, language }: { text: string; language: string }) {
   const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState("");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  function speak() {
-    if (!("speechSynthesis" in window)) return;
+  async function speak() {
+    setAudioError("");
     if (playing) {
-      speechSynthesis.cancel();
+      audioRef.current?.pause();
+      audioRef.current = null;
+      if ("speechSynthesis" in window) speechSynthesis.cancel();
       setPlaying(false);
       return;
     }
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.onend = () => setPlaying(false);
-    utter.onerror = () => setPlaying(false);
-    setPlaying(true);
-    speechSynthesis.speak(utter);
+
+    try {
+      setLoading(true);
+      let url = audioUrl;
+      if (!url) {
+        const tts = await synthesizeSpeech(text, language);
+        if (tts.mocked || !tts.audioBlob) {
+          // Fallback for mocked mode: browser TTS
+          if (!("speechSynthesis" in window)) {
+            throw new Error("No browser speech synthesis available.");
+          }
+          const utter = new SpeechSynthesisUtterance(tts.text || text);
+          utter.lang = language === "english" ? "en-IN" : language;
+          utter.onend = () => setPlaying(false);
+          utter.onerror = () => setPlaying(false);
+          setPlaying(true);
+          speechSynthesis.speak(utter);
+          return;
+        }
+        url = URL.createObjectURL(tts.audioBlob);
+        setAudioUrl(url);
+      }
+
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => {
+        setPlaying(false);
+        setAudioError("Unable to play returned audio.");
+      };
+      await audio.play();
+      setPlaying(true);
+    } catch {
+      setAudioError("Unable to play returned audio.");
+      setPlaying(false);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -150,14 +189,18 @@ function TTSPlayer({ text }: { text: string }) {
       <p className="text-xs text-blue-600 flex-1 line-clamp-1 italic">{text}</p>
       <button
         onClick={speak}
+        disabled={loading}
         className={`w-7 h-7 rounded-full flex items-center justify-center transition-all
           ${playing
             ? "bg-orange-500 text-white hover:bg-orange-600"
+            : loading
+            ? "bg-slate-300 text-white"
             : "bg-blue-600 text-white hover:bg-blue-700"
           }`}
       >
         {playing ? <Pause size={11} /> : <Play size={11} />}
       </button>
+      {audioError && <span className="text-[10px] text-red-500">{audioError}</span>}
     </div>
   );
 }

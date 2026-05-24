@@ -149,7 +149,39 @@ export async function describeImage(file: File): Promise<ImageResponse> {
 // ── TTS ───────────────────────────────────────────────────────────────────────
 
 export async function synthesizeSpeech(text: string, language: string): Promise<TTSResult> {
-  return req("/output/tts", { method: "POST", body: JSON.stringify({ text, language }) });
+  const res = await fetch(`${BASE}/output/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, language }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    let message = res.statusText || `HTTP ${res.status}`;
+    try { message = JSON.parse(body).message ?? message; } catch { if (body) message = `${res.status}: ${body.slice(0, 120)}`; }
+    const traceId = res.headers.get("x-trace-id");
+    if (traceId) message = `${message} (trace: ${traceId})`;
+    throw new Error(message);
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const json = await res.json();
+    return {
+      mocked: Boolean(json.mocked),
+      text: json.text ?? text,
+      engine: json.engine ?? "unknown",
+      contentType,
+    };
+  }
+
+  const audioBlob = await res.blob();
+  return {
+    mocked: false,
+    text,
+    engine: "server-audio",
+    audioBlob,
+    contentType,
+  };
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -233,6 +265,8 @@ export interface TTSResult {
   mocked: boolean;
   text: string;
   engine: string;
+  audioBlob?: Blob;
+  contentType?: string;
 }
 
 export interface MetaExtractResult {
