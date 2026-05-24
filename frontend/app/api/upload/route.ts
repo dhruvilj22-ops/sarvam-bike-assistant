@@ -26,14 +26,16 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async (params) => {
-        const tokenParams =
-          typeof params === "string"
-            ? { pathname: params, contentType: undefined, clientPayload: undefined }
-            : {
-                pathname: params?.pathname,
-                contentType: params?.contentType,
-                clientPayload: params?.clientPayload,
-              };
+        const rawParams = params as unknown;
+        const paramObj =
+          typeof rawParams === "object" && rawParams !== null
+            ? (rawParams as Record<string, unknown>)
+            : null;
+        const tokenParams = {
+          pathname: typeof rawParams === "string" ? rawParams : paramObj?.pathname,
+          contentType: paramObj?.contentType,
+          clientPayload: paramObj?.clientPayload,
+        };
         console.info("[upload-token] token-params", {
           traceId,
           ...tokenParams,
