@@ -61,8 +61,15 @@ export default function HomePage() {
           setUploadError(s.message);
           setUploading(false);
         }
-      } catch {
-        // keep polling
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("Job not found") || message.includes("404")) {
+          clearInterval(pollRef.current!);
+          setUploadError("Ingestion job was lost after a backend restart. Please click 'Index this manual' again.");
+          setUploading(false);
+          return;
+        }
+        // transient network issue: keep polling
       }
     }, 2000);
     return () => clearInterval(pollRef.current!);
