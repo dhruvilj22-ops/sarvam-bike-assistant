@@ -78,7 +78,13 @@ def _extract_tables_llamaparse(pdf_path: str) -> List[Dict]:
 
 
 def _extract_tables_mock() -> List[Dict]:
-    return [json.loads((_ROOT / "tests/fixtures/sample_table.json").read_text())]
+    fixture = _ROOT / "tests/fixtures/sample_table.json"
+    if not fixture.exists():
+        return []
+    try:
+        return [json.loads(fixture.read_text())]
+    except Exception:
+        return []
 
 
 def parse_pdf(
