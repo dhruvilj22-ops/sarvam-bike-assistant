@@ -149,8 +149,23 @@ def vector_search(
             with_payload=True,
         )
         return [(r.payload, r.score) for r in result.points]
-    except (ValueError, Exception):
-        return []
+    except Exception as exc:
+        logger.warning("qdrant query_points failed; falling back to search: %s", exc)
+        try:
+            # Compatibility fallback for clusters/versions where /points/query rejects payload.
+            result = client.search(
+                collection_name=_COLLECTION,
+                query_vector=query_vector,
+                query_filter=Filter(
+                    must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+                ),
+                limit=top_k,
+                with_payload=True,
+            )
+            return [(r.payload, r.score) for r in result]
+        except Exception as fallback_exc:
+            logger.error("qdrant search fallback failed: %s", fallback_exc)
+            return []
 
 
 def bm25_search(
