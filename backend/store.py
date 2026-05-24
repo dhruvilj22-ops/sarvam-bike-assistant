@@ -15,6 +15,20 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_ssl_env() -> None:
+    """
+    Remove broken CA bundle overrides copied from a different machine path.
+    """
+    for key in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"):
+        value = os.getenv(key, "").strip()
+        if value and not os.path.exists(value):
+            logger.warning("Ignoring invalid %s path: %s", key, value)
+            os.environ.pop(key, None)
+
+
+_sanitize_ssl_env()
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

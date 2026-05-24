@@ -40,8 +40,10 @@ def get_qdrant_client() -> QdrantClient:
         # Feature flag:
         # USE_CLOUD_QDRANT=true  -> attempt remote Cloud Qdrant
         # USE_CLOUD_QDRANT=false -> force in-memory mode
-        use_cloud = _is_truthy(os.getenv("USE_CLOUD_QDRANT", "false"))
+        raw_use_cloud = os.getenv("USE_CLOUD_QDRANT")
         url = os.getenv("QDRANT_URL", "").strip().rstrip("/")
+        # Default to cloud when URL is present, unless explicitly disabled.
+        use_cloud = bool(url) if raw_use_cloud is None else _is_truthy(raw_use_cloud)
         if use_cloud and url:
             try:
                 logger.info("qdrant_init mode=remote url=%s", url)

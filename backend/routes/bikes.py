@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from fastapi import APIRouter
 import store
+from ingestion.indexer import get_qdrant_client
 
 router = APIRouter()
 
@@ -53,6 +54,43 @@ def _chapter_to_question(title: str) -> str:
     return f"What does the manual say about {title}?"
 
 
+def _library_from_qdrant() -> list:
+    """
+    Build library summaries from indexed chunk payloads when metadata store is empty.
+    """
+    try:
+        client = get_qdrant_client()
+        rows, _ = client.scroll(
+            collection_name="bike_manuals",
+            limit=5000,
+            with_payload=True,
+            with_vectors=False,
+        )
+        seen = {}
+        for p in rows:
+            payload = getattr(p, "payload", {}) or {}
+            if payload.get("manual_source", "user_uploaded") != "library":
+                continue
+            doc_id = payload.get("document_id", "")
+            if not doc_id:
+                continue
+            if doc_id not in seen:
+                seen[doc_id] = {
+                    "document_id": doc_id,
+                    "bike_brand": payload.get("bike_brand", ""),
+                    "bike_model": payload.get("bike_model", ""),
+                    "bike_year": payload.get("bike_year", ""),
+                    "manual_type": payload.get("manual_type", ""),
+                    "manual_source": payload.get("manual_source", "user_uploaded"),
+                    "total_chunks": 0,
+                    "ingestion_timestamp": "",
+                }
+            seen[doc_id]["total_chunks"] += 1
+        return list(seen.values())
+    except Exception:
+        return []
+
+
 @router.get("/bikes/library")
 def library():
     # Primary: durable Supabase-backed document metadata store.
@@ -66,7 +104,12 @@ def library():
                 seen[key] = b
         return {"bikes": list(seen.values())}
 
-    # Fallback: local index JSON files (dev / non-Supabase mode).
+    # Fallback 1: derive library docs directly from Qdrant payloads.
+    qdrant_rows = _library_from_qdrant()
+    if qdrant_rows:
+        return {"bikes": qdrant_rows}
+
+    # Fallback 2: local index JSON files (dev / non-Supabase mode).
     raw = []
     if _INDEX_DIR.exists():
         for path in sorted(_INDEX_DIR.glob("*_index.json")):
