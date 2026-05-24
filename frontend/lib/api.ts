@@ -1,14 +1,20 @@
-import { upload } from "@vercel/blob/client";
-
 const BASE = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.NODE_ENV === "production" ? "/_/backend" : "http://localhost:8000");
 
 export async function uploadToBlob(file: File): Promise<string> {
-  const blob = await upload(file.name, file, {
-    access: "public",
-    handleUploadUrl: "/api/upload",
-  });
-  return blob.url;
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/upload-file", { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    let message = res.statusText || `HTTP ${res.status}`;
+    try { message = JSON.parse(body).error ?? message; } catch { if (body) message = `${res.status}: ${body.slice(0, 120)}`; }
+    const traceId = res.headers.get("x-trace-id");
+    if (traceId) message = `${message} (trace: ${traceId})`;
+    throw new Error(message);
+  }
+  const data = await res.json() as { url: string };
+  return data.url;
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
