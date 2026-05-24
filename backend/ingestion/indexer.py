@@ -23,7 +23,8 @@ from qdrant_client.models import (
 
 _COLLECTION = "bike_manuals"
 _ROOT = Path(__file__).parent.parent.parent
-_INDEX_DIR = Path(os.getenv("INDEX_DIR", str(_ROOT / "data" / "indexes")))
+_DEFAULT_INDEX_DIR = "/tmp/indexes" if os.getenv("VERCEL") else str(_ROOT / "data" / "indexes")
+_INDEX_DIR = Path(os.getenv("INDEX_DIR", _DEFAULT_INDEX_DIR))
 
 _qdrant_client: Optional[QdrantClient] = None
 logger = logging.getLogger(__name__)

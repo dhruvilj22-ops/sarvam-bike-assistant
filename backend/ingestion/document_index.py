@@ -12,7 +12,8 @@ from .classifier import ContentType
 import os
 
 _ROOT = Path(__file__).parent.parent.parent
-_INDEX_DIR = Path(os.getenv("INDEX_DIR", str(_ROOT / "data" / "indexes")))
+_DEFAULT_INDEX_DIR = "/tmp/indexes" if os.getenv("VERCEL") else str(_ROOT / "data" / "indexes")
+_INDEX_DIR = Path(os.getenv("INDEX_DIR", _DEFAULT_INDEX_DIR))
 
 
 def generate_document_index(
