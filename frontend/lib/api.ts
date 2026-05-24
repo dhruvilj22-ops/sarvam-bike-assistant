@@ -5,7 +5,7 @@ const BASE = process.env.NEXT_PUBLIC_API_URL
 
 export async function uploadToBlob(file: File): Promise<string> {
   const blob = await upload(file.name, file, {
-    access: "public",
+    access: "private",
     handleUploadUrl: "/api/upload",
   });
   return blob.url;

@@ -70,7 +70,17 @@ def _download_blob(blob_url: str) -> str:
     suffix = ".pdf"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix, dir="/tmp")
     os.close(fd)
-    urllib.request.urlretrieve(blob_url, tmp_path)
+    token = os.getenv("BLOB_READ_WRITE_TOKEN", "").strip()
+    is_private_blob = ".private.blob.vercel-storage.com/" in blob_url
+
+    if is_private_blob and token:
+        req = urllib.request.Request(blob_url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req) as resp:
+            data = resp.read()
+        with open(tmp_path, "wb") as f:
+            f.write(data)
+    else:
+        urllib.request.urlretrieve(blob_url, tmp_path)
     return tmp_path
 
 
