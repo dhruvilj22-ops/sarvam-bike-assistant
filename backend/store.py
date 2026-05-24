@@ -114,6 +114,14 @@ def create_session() -> str:
     return session_id
 
 
+def ensure_session(session_id: str) -> Dict:
+    """Ensure session exists in memory; recreate if missing."""
+    if session_id not in _sessions:
+        _sessions[session_id] = {"session_id": session_id, "created_at": _now(), "language": "en"}
+    _threads.setdefault(session_id, [])
+    return _sessions[session_id]
+
+
 def get_session(session_id: str) -> Optional[Dict]:
     return _sessions.get(session_id)
 
@@ -256,4 +264,3 @@ def get_document_index(document_id: str) -> Optional[Dict]:
             _documents[document_id] = data
             return data
     return None
-
