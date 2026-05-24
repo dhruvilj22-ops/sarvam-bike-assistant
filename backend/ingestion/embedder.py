@@ -6,6 +6,7 @@ import os
 from typing import Dict, List
 
 import numpy as np
+import httpx
 
 EMBEDDING_DIM = 1536  # text-embedding-3-small output dimension
 _MOCK_VECTOR = list(np.random.default_rng(42).standard_normal(EMBEDDING_DIM).astype(float))
@@ -17,7 +18,12 @@ def _embed_real(texts: List[str]) -> List[List[float]]:
     # OpenAI text-embedding-3-small — cost-effective and strong on technical text
     from openai import OpenAI
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # Ignore host-level SSL/proxy env overrides that can reference invalid paths
+    # in serverless deployments.
+    client = OpenAI(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        http_client=httpx.Client(trust_env=False, timeout=60.0),
+    )
     vectors = []
     for i in range(0, len(texts), _BATCH_SIZE):
         batch = texts[i : i + _BATCH_SIZE]
