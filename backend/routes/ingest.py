@@ -71,7 +71,11 @@ def _download_blob(blob_url: str) -> str:
     suffix = ".pdf"
     fd, tmp_path = tempfile.mkstemp(suffix=suffix, dir="/tmp")
     os.close(fd)
-    resp = requests.get(blob_url, timeout=60)
+    # Ignore host-level REQUESTS_CA_BUNDLE/CURL_CA_BUNDLE overrides that can
+    # point to invalid local paths in serverless environments.
+    session = requests.Session()
+    session.trust_env = False
+    resp = session.get(blob_url, timeout=60)
     resp.raise_for_status()
     with open(tmp_path, "wb") as f:
         f.write(resp.content)
