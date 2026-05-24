@@ -30,11 +30,19 @@ _qdrant_client: Optional[QdrantClient] = None
 logger = logging.getLogger(__name__)
 
 
+def _is_truthy(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_qdrant_client() -> QdrantClient:
     global _qdrant_client
     if _qdrant_client is None:
+        # Feature flag:
+        # USE_CLOUD_QDRANT=true  -> attempt remote Cloud Qdrant
+        # USE_CLOUD_QDRANT=false -> force in-memory mode
+        use_cloud = _is_truthy(os.getenv("USE_CLOUD_QDRANT", "false"))
         url = os.getenv("QDRANT_URL", "").strip().rstrip("/")
-        if url:
+        if use_cloud and url:
             try:
                 logger.info("qdrant_init mode=remote url=%s", url)
                 # Qdrant Cloud uses port 443 (HTTPS), not the self-hosted default 6333.
@@ -54,7 +62,10 @@ def get_qdrant_client() -> QdrantClient:
                 _qdrant_client = QdrantClient(":memory:")
                 logger.info("qdrant_init_success mode=memory")
         else:
-            logger.info("qdrant_init mode=memory reason=no_qdrant_url")
+            reason = "feature_flag_disabled"
+            if use_cloud and not url:
+                reason = "no_qdrant_url"
+            logger.info("qdrant_init mode=memory reason=%s", reason)
             _qdrant_client = QdrantClient(":memory:")
     return _qdrant_client
 
