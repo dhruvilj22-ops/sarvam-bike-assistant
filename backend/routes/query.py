@@ -3,6 +3,7 @@ POST /query — unified query assembly from text + voice transcript + image desc
 then runs the inference pipeline and returns a structured response.
 """
 import os
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -12,6 +13,7 @@ from output.tts import synthesize
 from store import update_session_language
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class QueryRequest(BaseModel):
@@ -48,12 +50,30 @@ def query(body: QueryRequest):
 
     use_mocks = os.getenv("USE_MOCKS", "false").lower() == "true"
 
-    result = run_query(
-        query=unified,
-        document_id=body.document_id,
-        thread_id=body.thread_id,
-        use_mocks=use_mocks,
-    )
+    try:
+        result = run_query(
+            query=unified,
+            document_id=body.document_id,
+            thread_id=body.thread_id,
+            use_mocks=use_mocks,
+        )
+    except Exception as exc:
+        logger.exception("query pipeline failed")
+        result = {
+            "answer_text": (
+                "I couldn't find this in your manual. "
+                "For this issue, I'd recommend visiting an authorised service center."
+            ),
+            "spoken_summary": "I could not complete retrieval from the manual right now.",
+            "citations": [],
+            "severity_label": "N/A",
+            "confidence": "low",
+            "suggested_followups": [],
+            "intent": "diagnostic",
+            "language": "en",
+            "context_confidence": "low",
+            "_debug_error": repr(exc),
+        }
 
     result["session_id"] = body.session_id
     result["thread_id"] = body.thread_id

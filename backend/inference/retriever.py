@@ -4,6 +4,7 @@ Intent adjusts the vec_k / bm25_k split before merging.
 """
 import os
 from typing import Dict, List, Tuple
+import httpx
 
 from ingestion.indexer import bm25_search, vector_search
 
@@ -58,7 +59,10 @@ def retrieve(
         query_vector = _MOCK_VECTOR
     else:
         from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            http_client=httpx.Client(trust_env=False, timeout=60.0),
+        )
         resp = client.embeddings.create(model="text-embedding-3-small", input=[query])
         query_vector = resp.data[0].embedding
 
