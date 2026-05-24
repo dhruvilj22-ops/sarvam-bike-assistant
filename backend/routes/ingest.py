@@ -266,8 +266,10 @@ async def extract_meta(blob_url: str = Form(...)):
             pdf_bytes = f.read()
         text = _read_first_pages(pdf_bytes)
         fallback = _fallback_extract(text, blob_url.split("/")[-1])
-        if use_mocks or not os.getenv("OPENROUTER_API_KEY", "").strip():
+        if use_mocks:
             return _mock_extract(text)
+        if not os.getenv("OPENROUTER_API_KEY", "").strip():
+            return _fallback_extract(text, blob_url.split("/")[-1])
         return _merge_meta(_llm_extract(text), fallback)
     except Exception as exc:
         logger.warning("extract-meta failed: %s", exc)
