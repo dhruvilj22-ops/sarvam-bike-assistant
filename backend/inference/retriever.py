@@ -3,12 +3,14 @@ Hybrid retrieval: Qdrant vector search + BM25, merged via Reciprocal Rank Fusion
 Intent adjusts the vec_k / bm25_k split before merging.
 """
 import os
+import logging
 from typing import Dict, List, Tuple
 import httpx
 
 from ingestion.indexer import bm25_search, vector_search
 
 _RRF_K = 60
+logger = logging.getLogger(__name__)
 
 
 def _rrf_merge(
@@ -70,4 +72,23 @@ def retrieve(
     bm25_results = bm25_search(query.lower().split(), document_id, top_k=bm25_k)
 
     merged = _rrf_merge(vec_results, bm25_results)
+    logger.info(
+        "retrieve_summary document_id=%s intent=%s vec_k=%s bm25_k=%s vec_hits=%s bm25_hits=%s merged_hits=%s",
+        document_id,
+        intent,
+        vec_k,
+        bm25_k,
+        len(vec_results),
+        len(bm25_results),
+        len(merged),
+    )
+    for i, (chunk, score) in enumerate(merged[:3], start=1):
+        logger.info(
+            "retrieve_top rank=%s chunk_id=%s page=%s section=%s score=%.6f",
+            i,
+            chunk.get("chunk_id", ""),
+            chunk.get("page_number", 0),
+            chunk.get("section_number", ""),
+            float(score),
+        )
     return merged[:top_k]

@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -22,6 +23,7 @@ from inference.reranker import rerank
 from inference.retriever import retrieve
 
 CONFIDENCE_THRESHOLD = 0.35
+logger = logging.getLogger(__name__)
 
 
 def run_query(
@@ -36,10 +38,24 @@ def run_query(
     """
     if use_mocks is None:
         use_mocks = os.getenv("USE_MOCKS", "false").lower() == "true"
+    logger.info(
+        "pipeline_start thread_id=%s document_id=%s query_chars=%s use_mocks=%s",
+        thread_id,
+        document_id,
+        len(query or ""),
+        use_mocks,
+    )
 
     # Step 1: Query expansion + intent classification
     expanded = expand_query(query, use_mocks=use_mocks)
     intent = expanded["intent"]
+    logger.info(
+        "pipeline_expand thread_id=%s intent=%s language=%s expanded_chars=%s",
+        thread_id,
+        intent,
+        expanded.get("language", ""),
+        len(expanded.get("expanded", "") or ""),
+    )
 
     # Step 2 & 3: Hybrid retrieval (embedding happens inside retriever)
     chunks_with_scores = retrieve(
@@ -48,6 +64,11 @@ def run_query(
         intent=intent,
         top_k=7,
         use_mocks=use_mocks,
+    )
+    logger.info(
+        "pipeline_retrieve thread_id=%s results=%s",
+        thread_id,
+        len(chunks_with_scores),
     )
 
     if not chunks_with_scores:
@@ -66,15 +87,24 @@ def run_query(
             "context_confidence": "low",
         }
         add_turn(thread_id, query, result["answer_text"])
+        logger.warning("pipeline_no_results thread_id=%s", thread_id)
         return result
 
     # Step 4: Rerank to top 5
     chunks_only = [c for c, _ in chunks_with_scores]
     reranked = rerank(expanded["expanded"], chunks_only, top_n=5, use_mocks=use_mocks)
+    logger.info("pipeline_rerank thread_id=%s reranked=%s", thread_id, len(reranked))
 
     # Step 5: Confidence gate
     top_score = reranked[0][1] if reranked else 0.0
     context_confidence = "low" if top_score < CONFIDENCE_THRESHOLD else "high"
+    logger.info(
+        "pipeline_confidence_gate thread_id=%s top_score=%.4f threshold=%.2f context_confidence=%s",
+        thread_id,
+        float(top_score),
+        CONFIDENCE_THRESHOLD,
+        context_confidence,
+    )
 
     # Step 6: History context for this thread
     history_context = get_context_history(thread_id, use_mocks=use_mocks)
@@ -96,6 +126,12 @@ def run_query(
 
     # Step 8: Update history
     add_turn(thread_id, query, response.get("answer_text", ""))
+    logger.info(
+        "pipeline_end thread_id=%s citations=%s answer_chars=%s",
+        thread_id,
+        len(response.get("citations") or []),
+        len(response.get("answer_text", "") or ""),
+    )
 
     return response
 

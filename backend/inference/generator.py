@@ -195,6 +195,13 @@ def generate(
         confidence_level=context_confidence.upper(),
         language_instruction=language_instruction,
     )
+    logger.info(
+        "generate_start language=%s context_confidence=%s chunks=%s bike=%s",
+        language,
+        context_confidence,
+        len(chunks),
+        bike,
+    )
 
     context_block = _format_context(chunks)
     user_content = ""
@@ -230,5 +237,12 @@ def generate(
             logger.error("Generator regeneration failed: %s", e)
         if not result.get("citations"):
             logger.warning("No citation after regeneration — returning response without citation")
+    logger.info(
+        "generate_end citations=%s severity=%s confidence=%s answer_chars=%s",
+        len(result.get("citations") or []),
+        result.get("severity_label", ""),
+        result.get("confidence", ""),
+        len(result.get("answer_text", "") or ""),
+    )
 
     return _safe_defaults(result, context_confidence)

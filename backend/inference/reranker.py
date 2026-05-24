@@ -45,10 +45,21 @@ def rerank(
         resp = requests.post(_COHERE_URL, headers=headers, json=payload, timeout=30)
         resp.raise_for_status()
         data = resp.json()
-        return [
+        out = [
             (chunks[r["index"]], r["relevance_score"])
             for r in data["results"]
         ]
+        logger.info("rerank_summary top_n=%s in_chunks=%s out_chunks=%s", top_n, len(chunks), len(out))
+        for i, (chunk, score) in enumerate(out[:3], start=1):
+            logger.info(
+                "rerank_top rank=%s chunk_id=%s page=%s section=%s relevance=%.6f",
+                i,
+                chunk.get("chunk_id", ""),
+                chunk.get("page_number", 0),
+                chunk.get("section_number", ""),
+                float(score),
+            )
+        return out
     except Exception:
         logger.warning("Cohere rerank failed — falling back to mock scores")
         return [

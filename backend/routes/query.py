@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from inference.pipeline import run_query
 from output.tts import synthesize
 from store import update_session_language
+from logging_ctx import get_trace_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -44,7 +45,20 @@ def assemble_query(
 
 @router.post("/query")
 def query(body: QueryRequest):
+    trace_id = get_trace_id()
     unified = assemble_query(body.text, body.transcript, body.image_description)
+    logger.info(
+        "query_start trace_id=%s session_id=%s thread_id=%s document_id=%s has_text=%s has_transcript=%s has_image_desc=%s voice_initiated=%s unified_chars=%s",
+        trace_id,
+        body.session_id,
+        body.thread_id,
+        body.document_id,
+        bool(body.text and body.text.strip()),
+        bool(body.transcript and body.transcript.strip()),
+        bool(body.image_description and body.image_description.strip()),
+        body.voice_initiated,
+        len(unified or ""),
+    )
     if not unified.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
 
@@ -94,5 +108,17 @@ def query(body: QueryRequest):
         }
     else:
         result["tts"] = None
+
+    logger.info(
+        "query_end trace_id=%s thread_id=%s intent=%s language=%s context_confidence=%s confidence=%s citations=%s severity=%s",
+        trace_id,
+        body.thread_id,
+        result.get("intent", ""),
+        result.get("language", ""),
+        result.get("context_confidence", ""),
+        result.get("confidence", ""),
+        len(result.get("citations") or []),
+        result.get("severity_label", ""),
+    )
 
     return result

@@ -20,6 +20,7 @@ from routes.input import router as input_router
 from routes.output import router as output_router
 from routes.query import router as query_router
 from routes.session import router as session_router
+from logging_ctx import set_trace_id
 
 app = FastAPI(title="Bike Troubleshooting Assistant")
 logger = logging.getLogger("bike-assistant")
@@ -48,6 +49,7 @@ app.add_middleware(
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     trace_id = request.headers.get("x-trace-id") or str(uuid.uuid4())
+    set_trace_id(trace_id)
     start = time.perf_counter()
     try:
         response = await call_next(request)
