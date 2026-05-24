@@ -4,13 +4,9 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request): Promise<NextResponse> {
   const traceId = crypto.randomUUID();
 
-  // Accept either env naming style and normalize for Blob SDK runtime expectations.
-  if (!process.env.BLOB_READ_WRITE_TOKEN && process.env.PUBLIC_READ_WRITE_TOKEN) {
-    process.env.BLOB_READ_WRITE_TOKEN = process.env.PUBLIC_READ_WRITE_TOKEN;
-  }
-  if (!process.env.BLOB_STORE_ID && process.env.PUBLIC_STORE_ID) {
-    process.env.BLOB_STORE_ID = process.env.PUBLIC_STORE_ID;
-  }
+  // Force SDK to use PUBLIC_* vars only; ignore stale BLOB_* values.
+  process.env.BLOB_READ_WRITE_TOKEN = process.env.PUBLIC_READ_WRITE_TOKEN ?? "";
+  process.env.BLOB_STORE_ID = process.env.PUBLIC_STORE_ID ?? "";
 
   let body: HandleUploadBody;
   try {
@@ -26,8 +22,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   const hasBlobToken = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
   const hasBlobStoreId = Boolean(process.env.BLOB_STORE_ID);
   const envSource = {
-    token: process.env.BLOB_READ_WRITE_TOKEN ? "BLOB_READ_WRITE_TOKEN" : (process.env.PUBLIC_READ_WRITE_TOKEN ? "PUBLIC_READ_WRITE_TOKEN" : "missing"),
-    store: process.env.BLOB_STORE_ID ? "BLOB_STORE_ID" : (process.env.PUBLIC_STORE_ID ? "PUBLIC_STORE_ID" : "missing"),
+    token: process.env.PUBLIC_READ_WRITE_TOKEN ? "PUBLIC_READ_WRITE_TOKEN" : "missing",
+    store: process.env.PUBLIC_STORE_ID ? "PUBLIC_STORE_ID" : "missing",
   };
   const bodyInfo = {
     pathname: (body as { pathname?: string }).pathname,
