@@ -10,7 +10,7 @@ import re
 import tempfile
 import urllib.request
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
+from fastapi import APIRouter, Form, HTTPException
 import requests
 
 import store
@@ -303,9 +303,8 @@ async def extract_meta(blob_url: str = Form(...)):
                 pass
 
 
-@router.post("/ingest", status_code=202)
+@router.post("/ingest")
 async def ingest(
-    background_tasks: BackgroundTasks,
     blob_url: str = Form(...),
     brand: str = Form(...),
     model: str = Form(...),
@@ -322,8 +321,8 @@ async def ingest(
     }
 
     job_id = store.create_job()
-    background_tasks.add_task(_run_ingest_from_blob, job_id, blob_url, doc_meta)
-    return {"job_id": job_id}
+    _run_ingest_from_blob(job_id, blob_url, doc_meta)
+    return store.get_job(job_id)
 
 
 @router.get("/ingest/status/{job_id}")

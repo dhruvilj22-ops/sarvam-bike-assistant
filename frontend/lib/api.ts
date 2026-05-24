@@ -81,7 +81,7 @@ export async function extractMeta(blobUrl: string): Promise<MetaExtractResult> {
 export async function ingestPdf(
   blobUrl: string,
   meta: { bike_brand: string; bike_model: string; bike_year: string; manual_type: string; save_to_library?: boolean }
-): Promise<{ job_id: string }> {
+): Promise<IngestStatus> {
   const form = new FormData();
   form.append("blob_url", blobUrl);
   form.append("brand", meta.bike_brand);

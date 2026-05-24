@@ -88,14 +88,29 @@ export default function HomePage() {
     setProgress(0);
     setProgressMsg("Starting...");
     try {
-      const { job_id } = await ingestPdf(blobUrl, {
+      const result = await ingestPdf(blobUrl, {
         bike_brand: brand,
         bike_model: model,
         bike_year: year,
         manual_type: manualType,
         save_to_library: saveToLibrary,
       });
-      setJobId(job_id);
+      setProgress(result.progress_pct ?? 0);
+      setProgressMsg(result.message ?? "");
+
+      if (result.status === "complete") {
+        setUploadDone(true);
+        setUploadDocId(result.document_id ?? "");
+        setUploading(false);
+      } else if (result.status === "error") {
+        setUploadError(result.message || "Indexing failed");
+        setUploading(false);
+      } else if (result.job_id) {
+        setJobId(result.job_id);
+      } else {
+        setUploadError("Unexpected ingest response");
+        setUploading(false);
+      }
     } catch (err: unknown) {
       console.error("[ingest] failed to start ingestion", {
         blobUrl,
